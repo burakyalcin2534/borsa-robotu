@@ -10,40 +10,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Adım: Önce senin kodlarını çek
-    - name: Senin Kodları Çek
+    - name: Kodları Çek
       uses: actions/checkout@v3
 
-    # 2. Adım: pandas_ta kütüphanesini ayrı bir klasöre indir (Link hatasını önler)
-    - name: pandas-ta Kütüphanesini İndir
-      uses: actions/checkout@v3
-      with:
-        repository: twopirllc/pandas-ta
-        path: pandas-ta-source
-
-    # 3. Adım: Python Kur
+    # Python 3.9 en kararlı sürümdür, bunu kullanacağız.
     - name: Python Kurulumu
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: '3.9'
 
-    # 4. Adım: Kurulumları Yap
-    - name: Kütüphaneleri Yükle
+    - name: Zorla Kurulum Yap
       run: |
+        # 1. Pip güncelle
         python -m pip install --upgrade pip
         pip install wheel setuptools
         
-        # Numpy sürümünü sabitle
+        # 2. Numpy'yi sabitle (Çok önemli)
         pip install "numpy<2.0.0"
         
-        # Diğer standart kütüphaneleri kur
+        # 3. Standart kütüphaneleri kur
         pip install pandas requests yfinance scikit-learn xgboost lightgbm catboost
         
-        # GARANTİ ÇÖZÜM: İndirdiğimiz klasörden pandas_ta'yı kur
-        pip install ./pandas-ta-source
-
-    - name: Dosyaları Kontrol Et
-      run: ls -R
+        # 4. PANDAS-TA İÇİN "KABA KUVVET" YÖNTEMİ
+        # Link hatalarını aşmak için direkt wget ile indiriyoruz:
+        echo "Kütüphane indiriliyor..."
+        wget https://github.com/twopirllc/pandas-ta/archive/refs/heads/development.zip -O pandas_ta.zip
+        
+        echo "Zip açılıyor..."
+        unzip pandas_ta.zip
+        
+        echo "Klasörden kurulum yapılıyor..."
+        # Zip açılınca klasör adı 'pandas-ta-development' olur
+        pip install ./pandas-ta-development
 
     - name: Robotu Çalıştır
       env:
