@@ -2,6 +2,7 @@ name: Borsa Robotu
 
 on:
   schedule:
+    # Hafta içi her gün TSİ ile kapanıştan sonra çalışır
     - cron: '15 15 * * 1-5'
   workflow_dispatch:
 
@@ -13,36 +14,25 @@ jobs:
     - name: Kodları Çek
       uses: actions/checkout@v3
 
-    # Python 3.9, finans kütüphaneleri için en sağlam sürümdür.
+    # Python 3.10 en güncel ve stabil sürümlerdendir
     - name: Python Kurulumu
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.10'
 
     - name: Kurulumları Yap
       run: |
-        # 1. Pip Aracını Güncelle
         python -m pip install --upgrade pip
-        pip install wheel setuptools
         
-        # 2. Numpy Sürümünü Sabitle (Kritik!)
-        # Yeni numpy sürümü eski kodları bozduğu için eskisini kuruyoruz.
+        # Önlem: Numpy'nin çok yeni sürümü bazen çakışma yapar,
+        # işi garantiye almak için 2.0 öncesi sürümü kuruyoruz.
         pip install "numpy<2.0.0"
         
-        # 3. Standart Kütüphaneleri Yükle
-        pip install pandas requests yfinance scikit-learn xgboost lightgbm catboost
+        # Temel kütüphaneler (Artık pandas_ta yok, hata riski yok)
+        pip install pandas requests yfinance scikit-learn
         
-        # 4. PANDAS-TA İÇİN SON ÇÖZÜM:
-        # Link hatalarını aşmak için 'git clone' kullanıyoruz.
-        echo "Kütüphane kopyalanıyor..."
-        git clone https://github.com/twopirllc/pandas-ta.git
-        
-        echo "Klasörden kurulum yapılıyor..."
-        # İndirdiğimiz klasörün içine girip kurulum yapıyoruz
-        pip install ./pandas-ta
-
-    - name: Dosyaları Kontrol Et
-      run: ls -R
+        # Yapay zeka modelleri
+        pip install xgboost lightgbm catboost
 
     - name: Robotu Çalıştır
       env:
