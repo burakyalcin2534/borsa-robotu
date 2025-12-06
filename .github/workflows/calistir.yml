@@ -2,7 +2,7 @@ name: Borsa Robotu
 
 on:
   schedule:
-    - cron: '15 15 * * 1-5'
+    - cron: '0 15 * * 1-5'
   workflow_dispatch:
 
 jobs:
