@@ -7,16 +7,19 @@ import numpy as np
 import pandas as pd
 import requests
 
+# YENİ KÜTÜPHANE: ta
+import ta
+
 # ML Kütüphaneleri
 from sklearn.preprocessing import RobustScaler
 from sklearn.impute import SimpleImputer
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, VotingClassifier, VotingRegressor, BaggingClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score
 
 warnings.filterwarnings('ignore')
 
-# Gelişmiş Modeller (Varsa kullanır, yoksa hata vermez)
+# Gelişmiş Modeller (Varsa çalışır, yoksa hata vermez)
 try:
     import yfinance as yf
     import xgboost as xgb
@@ -47,63 +50,6 @@ def send_telegram(message):
             requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"})
     except: pass
 
-# ---------- TEKNİK ANALİZ MOTORU (Kütüphanesiz - Saf Matematik) ----------
-class TechnicalAnalysis:
-    @staticmethod
-    def get_sma(series, period):
-        return series.rolling(window=period).mean()
-
-    @staticmethod
-    def get_ema(series, period):
-        return series.ewm(span=period, adjust=False).mean()
-
-    @staticmethod
-    def get_rsi(series, period=14):
-        delta = series.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss
-        return 100 - (100 / (1 + rs))
-
-    @staticmethod
-    def get_atr(high, low, close, period=14):
-        tr1 = high - low
-        tr2 = abs(high - close.shift())
-        tr3 = abs(low - close.shift())
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        return tr.rolling(window=period).mean()
-
-    @staticmethod
-    def get_macd(close):
-        exp1 = close.ewm(span=12, adjust=False).mean()
-        exp2 = close.ewm(span=26, adjust=False).mean()
-        macd_line = exp1 - exp2
-        signal_line = macd_line.ewm(span=9, adjust=False).mean()
-        return macd_line
-
-    @staticmethod
-    def get_cci(high, low, close, period=14):
-        tp = (high + low + close) / 3
-        sma = tp.rolling(period).mean()
-        mad = (tp - sma).abs().rolling(period).mean()
-        return (tp - sma) / (0.015 * mad)
-
-    @staticmethod
-    def get_supertrend(high, low, close, period=10, multiplier=3):
-        # Basitleştirilmiş SuperTrend Hesaplaması
-        atr = TechnicalAnalysis.get_atr(high, low, close, period)
-        hl2 = (high + low) / 2
-        
-        # Basit hesaplama (Veri çerçevesi üzerinde vektörel)
-        upperband = hl2 + (multiplier * atr)
-        lowerband = hl2 - (multiplier * atr)
-        
-        # Yön tahmini için basit bir mantık: Kapanış üst bandı kırarsa AL, altı kırarsa SAT
-        # (Tam SuperTrend döngüsü çok kompleks olduğu için ML modeline giren feature olarak bu yeterlidir)
-        direction = np.where(close > upperband.shift(1), 1, 0)
-        direction = np.where(close < lowerband.shift(1), -1, direction)
-        return pd.Series(direction, index=close.index)
-
 # ---------- HİSSE LİSTESİ ----------
 BIST_100_LISTESI = [
     "AEFES.IS", "AGHOL.IS", "AKBNK.IS", "AKSA.IS", "AKSEN.IS", "ALARK.IS", "ALTNY.IS", "ANSGR.IS", "ARCLK.IS", "ASELS.IS",
@@ -120,13 +66,11 @@ BIST_100_LISTESI = [
 
 @dataclass
 class ModelConfig:
-    ticker: str = "XU100.IS"
     target_horizon: int = 1
-    random_state: int = 42
 
 CONFIG = ModelConfig()
 
-# ---------- VERİ VE ÖZELLİK MÜHENDİSLİĞİ ----------
+# ---------- VERİ YÖNETİMİ ----------
 class AdvancedDataManager:
     def download_data(self, ticker: str) -> pd.DataFrame:
         try:
@@ -140,19 +84,63 @@ class AdvancedDataManager:
             return df
         except: return pd.DataFrame()
 
+# ---------- ÖZELLİK MÜHENDİSLİĞİ (ta Kütüphanesi ile) ----------
 class OmniFeatureEngineer:
+    def calculate_supertrend(self, df, period=10, multiplier=3):
+        # SuperTrend ta kütüphanesinde olmadığı için manuel hesaplıyoruz
+        high = df['high']
+        low = df['low']
+        close = df['close']
+        
+        # ATR hesapla
+        atr = ta.volatility.average_true_range(high, low, close, window=period)
+        
+        hl2 = (high + low) / 2
+        upperband = hl2 + (multiplier * atr)
+        lowerband = hl2 - (multiplier * atr)
+        
+        # Basitleştirilmiş yön
+        direction = np.where(close > upperband.shift(1), 1, 0)
+        direction = np.where(close < lowerband.shift(1), -1, direction)
+        return pd.Series(direction, index=df.index)
+
     def create_features(self, df: pd.DataFrame) -> pd.DataFrame:
         f = df.copy()
         
-        # TA Kütüphanesi yerine kendi yazdığımız fonksiyonları kullanıyoruz
-        f['sma_10'] = TechnicalAnalysis.get_sma(f['close'], 10)
-        f['ema_20'] = TechnicalAnalysis.get_ema(f['close'], 20)
-        f['atr'] = TechnicalAnalysis.get_atr(f['high'], f['low'], f['close'], 14)
-        f['macd'] = TechnicalAnalysis.get_macd(f['close'])
-        f['rsi'] = TechnicalAnalysis.get_rsi(f['close'], 14)
-        f['cci'] = TechnicalAnalysis.get_cci(f['high'], f['low'], f['close'], 14)
-        f['supertrend_dir'] = TechnicalAnalysis.get_supertrend(f['high'], f['low'], f['close'])
+        # 1. Trend İndikatörleri (ta library)
+        f['sma_10'] = ta.trend.sma_indicator(f['close'], window=10)
+        f['sma_50'] = ta.trend.sma_indicator(f['close'], window=50)
+        f['ema_20'] = ta.trend.ema_indicator(f['close'], window=20)
         
+        # MACD
+        f['macd'] = ta.trend.macd(f['close'])
+        f['macd_signal'] = ta.trend.macd_signal(f['close'])
+        
+        # ADX (Geri Geldi!)
+        f['adx'] = ta.trend.adx(f['high'], f['low'], f['close'], window=14)
+        
+        # Ichimoku (Geri Geldi!)
+        ichi = ta.trend.IchimokuIndicator(f['high'], f['low'], window1=9, window2=26, window3=52)
+        f['ichi_a'] = ichi.ichimoku_a()
+        f['ichi_b'] = ichi.ichimoku_b()
+        f['ichi_cloud_dir'] = np.where(f['ichi_a'] > f['ichi_b'], 1, -1)
+
+        # 2. Volatilite
+        f['atr'] = ta.volatility.average_true_range(f['high'], f['low'], f['close'], window=14)
+        
+        # SuperTrend (Özel Fonksiyon)
+        f['supertrend_dir'] = self.calculate_supertrend(f)
+
+        # 3. Momentum
+        f['rsi'] = ta.momentum.rsi(f['close'], window=14)
+        f['cci'] = ta.trend.cci(f['high'], f['low'], f['close'], window=14)
+        f['roc'] = ta.momentum.roc(f['close'], window=10) # Geri Geldi!
+
+        # 4. Hacim
+        f['obv'] = ta.volume.on_balance_volume(f['close'], f['volume']) # Geri Geldi!
+        f['mfi'] = ta.volume.money_flow_index(f['high'], f['low'], f['close'], f['volume'], window=14) # Geri Geldi!
+        f['cmf'] = ta.volume.chaikin_money_flow(f['high'], f['low'], f['close'], f['volume'], window=20) # Geri Geldi!
+
         # Hedef Belirleme
         horizon = 1
         future_return = f['close'].pct_change(horizon).shift(-horizon)
@@ -181,7 +169,6 @@ class HybridModelTrainer:
         self.imputers['all'] = imp
         self.scalers['all'] = scl
         
-        # Model Eğitimi
         rf = RandomForestClassifier(n_estimators=100, max_depth=6, random_state=42, n_jobs=1)
         rf.fit(X_proc, y_cls)
         self.models['tree'] = rf
@@ -193,14 +180,13 @@ class HybridModelTrainer:
     def predict(self, X_raw: pd.DataFrame):
         X_ready = X_raw[self.feature_cols]
         X_proc = self.scalers['all'].transform(self.imputers['all'].transform(X_ready))
-        
         p_prob = self.models['tree'].predict_proba(X_proc)[0][1]
         p_ret = self.models['reg'].predict(X_proc)[0]
         return p_prob, p_ret
 
-# ---------- ANA TARAMA FONKSİYONU ----------
+# ---------- ANA TARAMA ----------
 def omni_scan():
-    tg_report = "🚀 *BIST 100 AI ANALİZ RAPORU* 🚀\n\n"
+    tg_report = "🚀 *BIST 100 AI ANALİZ RAPORU (Full İndikatör)* 🚀\n\n"
     print("Analiz Başlıyor...")
     
     # --- ENDEKS ANALİZİ ---
@@ -237,7 +223,6 @@ def omni_scan():
             df_features = fe.create_features(df)
             f_cols = [c for c in df_features.columns if 'target' not in c]
             train_df = df_features.dropna(subset=f_cols + ['target_dir', 'target_ret'])
-            
             if len(train_df) < 50: continue
             
             trainer = HybridModelTrainer(CONFIG)
@@ -246,7 +231,7 @@ def omni_scan():
             pred_row = df_features.iloc[[-1]]
             p_prob, p_ret = trainer.predict(pred_row)
             
-            if p_prob > 0.55: # Eşik değer
+            if p_prob > 0.55:
                 price = df['close'].iloc[-1]
                 atr = pred_row['atr'].values[0]
                 stop = price - (2 * atr)
@@ -262,7 +247,6 @@ def omni_scan():
                 })
         except: continue
 
-    # --- RAPORLAMA ---
     if results:
         results = sorted(results, key=lambda x: x['Güven'], reverse=True)
         tg_report += "💎 *GÜÇLÜ AL SİNYALLERİ* 💎\n"
@@ -279,4 +263,3 @@ def omni_scan():
 
 if __name__ == "__main__":
     omni_scan()
-
