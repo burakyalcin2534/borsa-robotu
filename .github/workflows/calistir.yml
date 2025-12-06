@@ -1,0 +1,31 @@
+name: Borsa Robotu
+
+on:
+  schedule:
+    # Hafta içi her gün UTC saatiyle 15:15'te çalışır.
+    # (Türkiye Saati ile kışın 18:15, yazın 18:15 civarı kapanış sonrası)
+    - cron: '15 15 * * 1-5'
+  workflow_dispatch: # Manuel çalıştırmak istersen diye buton ekler
+
+jobs:
+  analiz_yap:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Kodları Çek
+      uses: actions/checkout@v3
+
+    - name: Python Kurulumu
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Kütüphaneleri Yükle
+      run: |
+        pip install pandas numpy requests yfinance scikit-learn pandas_ta xgboost lightgbm catboost
+
+    - name: Robotu Çalıştır
+      env:
+        TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: python main.py
