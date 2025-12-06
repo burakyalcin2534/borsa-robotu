@@ -2,7 +2,6 @@ name: Borsa Robotu
 
 on:
   schedule:
-    # Hafta içi her gün TSİ ile kapanıştan sonra çalışır
     - cron: '15 15 * * 1-5'
   workflow_dispatch:
 
@@ -14,7 +13,7 @@ jobs:
     - name: Kodları Çek
       uses: actions/checkout@v3
 
-    # Python 3.10 en güncel ve stabil sürümlerdendir
+    # Python 3.10 kullanıyoruz
     - name: Python Kurulumu
       uses: actions/setup-python@v4
       with:
@@ -24,12 +23,12 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         
-        # Önlem: Numpy'nin çok yeni sürümü bazen çakışma yapar,
-        # işi garantiye almak için 2.0 öncesi sürümü kuruyoruz.
+        # Numpy sürümünü sabitle (Önlem olarak)
         pip install "numpy<2.0.0"
         
-        # Temel kütüphaneler (Artık pandas_ta yok, hata riski yok)
-        pip install pandas requests yfinance scikit-learn
+        # YENİ: 'pandas_ta' yerine 'ta' kütüphanesini kuruyoruz.
+        # Bu kütüphane PyPI üzerinden sorunsuz iner.
+        pip install pandas requests yfinance scikit-learn ta
         
         # Yapay zeka modelleri
         pip install xgboost lightgbm catboost
