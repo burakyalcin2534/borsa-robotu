@@ -29,9 +29,9 @@ jobs:
         # 2. Temel kütüphaneleri yükle
         pip install pandas requests yfinance scikit-learn xgboost lightgbm catboost
         
-        # 3. GARANTİ ÇÖZÜM: pandas_ta'yı ZIP dosyası olarak indirip kuruyoruz.
-        # Bu yöntem "Username/Password" hatasını %100 bypass eder.
-        pip install https://github.com/twopirllc/pandas-ta/archive/refs/heads/development.zip
+        # 3. KESİN ÇÖZÜM: 'development' yerine 'main' dosyasını indiriyoruz.
+        # Bu link kırılamaz, ana dosyadır.
+        pip install https://github.com/twopirllc/pandas-ta/archive/main.zip
 
     - name: Dosyaları Kontrol Et
       run: ls -R
