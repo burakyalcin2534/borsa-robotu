@@ -2,10 +2,8 @@ name: Borsa Robotu
 
 on:
   schedule:
-    # Hafta içi her gün UTC saatiyle 15:15'te çalışır.
-    # (Türkiye Saati ile kışın 18:15, yazın 18:15 civarı kapanış sonrası)
     - cron: '15 15 * * 1-5'
-  workflow_dispatch: # Manuel çalıştırmak istersen diye buton ekler
+  workflow_dispatch:
 
 jobs:
   analiz_yap:
@@ -15,14 +13,29 @@ jobs:
     - name: Kodları Çek
       uses: actions/checkout@v3
 
-    - name: Python Kurulumu
+    - name: Python Kurulumu (Guncel)
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.10' # 3.9'dan 3.10'a yükselttik (Hata 1 Çözümü)
 
     - name: Kütüphaneleri Yükle
       run: |
-        pip install pandas numpy requests yfinance scikit-learn pandas_ta xgboost lightgbm catboost
+        python -m pip install --upgrade pip
+        pip install wheel setuptools
+        
+        # ÖNEMLİ: Numpy 2.0 sürümü eski kütüphaneleri bozuyor.
+        # Bu yüzden 2.0'dan önceki en son sürümü yüklemeye zorluyoruz.
+        pip install "numpy<2.0.0"
+        
+        # Diğer kütüphaneleri yüklüyoruz
+        pip install pandas requests yfinance scikit-learn
+        pip install xgboost lightgbm catboost
+        
+        # pandas_ta'yı en sona bıraktık
+        pip install pandas_ta
+
+    - name: Dosyaları Kontrol Et
+      run: ls -R
 
     - name: Robotu Çalıştır
       env:
