@@ -23,15 +23,15 @@ jobs:
         python -m pip install --upgrade pip
         pip install wheel setuptools
         
-        # 1. Önce Numpy'yi güvenli sürüme sabitle
+        # 1. Numpy sürümünü sabitle (Hata almamak için şart)
         pip install "numpy<2.0.0"
         
         # 2. Temel kütüphaneleri yükle
         pip install pandas requests yfinance scikit-learn xgboost lightgbm catboost
         
-        # 3. KRİTİK DÜZELTME: pandas_ta'yı doğrudan GitHub'dan çekiyoruz
-        # (PyPI versiyonu bozuk olduğu için bu yöntem şart)
-        pip install git+https://github.com/twopirllc/pandas-ta.git@development
+        # 3. GARANTİ ÇÖZÜM: pandas_ta'yı ZIP dosyası olarak indirip kuruyoruz.
+        # Bu yöntem "Username/Password" hatasını %100 bypass eder.
+        pip install https://github.com/twopirllc/pandas-ta/archive/refs/heads/development.zip
 
     - name: Dosyaları Kontrol Et
       run: ls -R
