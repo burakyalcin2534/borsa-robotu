@@ -13,35 +13,36 @@ jobs:
     - name: Kodları Çek
       uses: actions/checkout@v3
 
-    # Python 3.9 en kararlı sürümdür, bunu kullanacağız.
+    # Python 3.9, finans kütüphaneleri için en sağlam sürümdür.
     - name: Python Kurulumu
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
 
-    - name: Zorla Kurulum Yap
+    - name: Kurulumları Yap
       run: |
-        # 1. Pip güncelle
+        # 1. Pip Aracını Güncelle
         python -m pip install --upgrade pip
         pip install wheel setuptools
         
-        # 2. Numpy'yi sabitle (Çok önemli)
+        # 2. Numpy Sürümünü Sabitle (Kritik!)
+        # Yeni numpy sürümü eski kodları bozduğu için eskisini kuruyoruz.
         pip install "numpy<2.0.0"
         
-        # 3. Standart kütüphaneleri kur
+        # 3. Standart Kütüphaneleri Yükle
         pip install pandas requests yfinance scikit-learn xgboost lightgbm catboost
         
-        # 4. PANDAS-TA İÇİN "KABA KUVVET" YÖNTEMİ
-        # Link hatalarını aşmak için direkt wget ile indiriyoruz:
-        echo "Kütüphane indiriliyor..."
-        wget https://github.com/twopirllc/pandas-ta/archive/refs/heads/development.zip -O pandas_ta.zip
-        
-        echo "Zip açılıyor..."
-        unzip pandas_ta.zip
+        # 4. PANDAS-TA İÇİN SON ÇÖZÜM:
+        # Link hatalarını aşmak için 'git clone' kullanıyoruz.
+        echo "Kütüphane kopyalanıyor..."
+        git clone https://github.com/twopirllc/pandas-ta.git
         
         echo "Klasörden kurulum yapılıyor..."
-        # Zip açılınca klasör adı 'pandas-ta-development' olur
-        pip install ./pandas-ta-development
+        # İndirdiğimiz klasörün içine girip kurulum yapıyoruz
+        pip install ./pandas-ta
+
+    - name: Dosyaları Kontrol Et
+      run: ls -R
 
     - name: Robotu Çalıştır
       env:
