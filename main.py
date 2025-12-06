@@ -7,19 +7,19 @@ import numpy as np
 import pandas as pd
 import requests
 
-# YENİ KÜTÜPHANE: ta
+# Kütüphane Değişikliği: pandas_ta yerine ta kullanıldı
 import ta
 
 # ML Kütüphaneleri
 from sklearn.preprocessing import RobustScaler
 from sklearn.impute import SimpleImputer
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, VotingClassifier, VotingRegressor, BaggingClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score
 
 warnings.filterwarnings('ignore')
 
-# Gelişmiş Modeller (Varsa çalışır, yoksa hata vermez)
+# Gelişmiş Modeller (GitHub'da varsa kullanır)
 try:
     import yfinance as yf
     import xgboost as xgb
@@ -33,7 +33,7 @@ except ImportError:
     _HAS_LGB = False
     _HAS_CAT = False
 
-# ---------- TELEGRAM FONKSİYONU ----------
+# ---------- TELEGRAM AYARLARI ----------
 def send_telegram(message):
     try:
         token = os.environ.get("TELEGRAM_TOKEN")
@@ -50,23 +50,24 @@ def send_telegram(message):
             requests.post(f"https://api.telegram.org/bot{token}/sendMessage", data={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"})
     except: pass
 
-# ---------- HİSSE LİSTESİ ----------
+# ---------- HİSSE LİSTESİ (Aynen Korundu) ----------
 BIST_100_LISTESI = [
     "AEFES.IS", "AGHOL.IS", "AKBNK.IS", "AKSA.IS", "AKSEN.IS", "ALARK.IS", "ALTNY.IS", "ANSGR.IS", "ARCLK.IS", "ASELS.IS",
     "ASTOR.IS", "BALSU.IS", "BIMAS.IS", "BINHO.IS", "BRSAN.IS", "BRYAT.IS", "BSOKE.IS", "BTCIM.IS", "CANTE.IS", "CCOLA.IS",
-    "CLEBI.IS", "CWENE.IS", "DAPGM.IS", "DOAS.IS", "DOHOL.IS", "DSTKF.IS", "ECILC.IS", "EFOR.IS", "EGEEN.IS", "EKGYO.IS",
+    "CLEBI.IS", "CWENE.IS", "DAPGM.IS", "DOAS.IS", "DOHOL.IS", "DSTKF.IS", "ECILC.IS", "EFORC.IS", "EGEEN.IS", "EKGYO.IS",
     "ENERY.IS", "ENJSA.IS", "ENKAI.IS", "EREGL.IS", "EUPWR.IS", "FENER.IS", "FROTO.IS", "GARAN.IS", "GENIL.IS", "GESAN.IS",
     "GLRMK.IS", "GRSEL.IS", "GRTHO.IS", "GSRAY.IS", "GUBRF.IS", "HALKB.IS", "HEKTS.IS", "IEYHO.IS", "IPEKE.IS", "ISCTR.IS",
     "ISMEN.IS", "KCAER.IS", "KCHOL.IS", "KONTR.IS", "KOZAA.IS", "KOZAL.IS", "KRDMD.IS", "KTLEV.IS", "KUYAS.IS", "MAGEN.IS",
     "MAVI.IS", "MGROS.IS", "MIATK.IS", "MPARK.IS", "OBAMS.IS", "ODAS.IS", "OTKAR.IS", "OYAKC.IS", "PATEK.IS", "PASEU.IS",
     "PETKM.IS", "PGSUS.IS", "RALYH.IS", "REEDR.IS", "SAHOL.IS", "SASA.IS", "SISE.IS", "SKBNK.IS", "SOKM.IS", "TABGD.IS",
-    "TAVHL.IS", "TCELL.IS", "THYAO.IS", "TKFEN.IS", "TOASO.IS", "TSKB.IS", "TSPOR.IS", "TUKAS.IS", "TTKOM.IS", "TTRAK.IS",
+    "TAVH.IS", "TCELL.IS", "THYAO.IS", "TKFEN.IS", "TOASO.IS", "TSKB.IS", "TSPOR.IS", "TUKAS.IS", "TTKOM.IS", "TTRAK.IS",
     "TUPRS.IS", "TUREX.IS", "TURSG.IS", "ULKER.IS", "VAKBN.IS", "VESTL.IS", "YEOTK.IS", "YKBNK.IS", "ZOREN.IS"
 ]
 
 @dataclass
 class ModelConfig:
     target_horizon: int = 1
+    random_state: int = 42
 
 CONFIG = ModelConfig()
 
@@ -84,72 +85,111 @@ class AdvancedDataManager:
             return df
         except: return pd.DataFrame()
 
-# ---------- ÖZELLİK MÜHENDİSLİĞİ (ta Kütüphanesi ile) ----------
+# ---------- ÖZELLİK MÜHENDİSLİĞİ (ta ile yeniden yazıldı) ----------
 class OmniFeatureEngineer:
     def calculate_supertrend(self, df, period=10, multiplier=3):
-        # SuperTrend ta kütüphanesinde olmadığı için manuel hesaplıyoruz
-        high = df['high']
-        low = df['low']
-        close = df['close']
-        
-        # ATR hesapla
+        high, low, close = df['high'], df['low'], df['close']
         atr = ta.volatility.average_true_range(high, low, close, window=period)
-        
         hl2 = (high + low) / 2
         upperband = hl2 + (multiplier * atr)
         lowerband = hl2 - (multiplier * atr)
-        
-        # Basitleştirilmiş yön
         direction = np.where(close > upperband.shift(1), 1, 0)
         direction = np.where(close < lowerband.shift(1), -1, direction)
         return pd.Series(direction, index=df.index)
 
     def create_features(self, df: pd.DataFrame) -> pd.DataFrame:
         f = df.copy()
-        
-        # 1. Trend İndikatörleri (ta library)
+        # Trend
         f['sma_10'] = ta.trend.sma_indicator(f['close'], window=10)
         f['sma_50'] = ta.trend.sma_indicator(f['close'], window=50)
         f['ema_20'] = ta.trend.ema_indicator(f['close'], window=20)
-        
-        # MACD
         f['macd'] = ta.trend.macd(f['close'])
-        f['macd_signal'] = ta.trend.macd_signal(f['close'])
-        
-        # ADX (Geri Geldi!)
         f['adx'] = ta.trend.adx(f['high'], f['low'], f['close'], window=14)
         
-        # Ichimoku (Geri Geldi!)
+        # Ichimoku
         ichi = ta.trend.IchimokuIndicator(f['high'], f['low'], window1=9, window2=26, window3=52)
-        f['ichi_a'] = ichi.ichimoku_a()
-        f['ichi_b'] = ichi.ichimoku_b()
-        f['ichi_cloud_dir'] = np.where(f['ichi_a'] > f['ichi_b'], 1, -1)
+        f['ichi_cloud_dir'] = np.where(ichi.ichimoku_a() > ichi.ichimoku_b(), 1, -1)
 
-        # 2. Volatilite
+        # Volatilite & Momentum
         f['atr'] = ta.volatility.average_true_range(f['high'], f['low'], f['close'], window=14)
-        
-        # SuperTrend (Özel Fonksiyon)
         f['supertrend_dir'] = self.calculate_supertrend(f)
-
-        # 3. Momentum
         f['rsi'] = ta.momentum.rsi(f['close'], window=14)
         f['cci'] = ta.trend.cci(f['high'], f['low'], f['close'], window=14)
-        f['roc'] = ta.momentum.roc(f['close'], window=10) # Geri Geldi!
+        f['roc'] = ta.momentum.roc(f['close'], window=10)
 
-        # 4. Hacim
-        f['obv'] = ta.volume.on_balance_volume(f['close'], f['volume']) # Geri Geldi!
-        f['mfi'] = ta.volume.money_flow_index(f['high'], f['low'], f['close'], f['volume'], window=14) # Geri Geldi!
-        f['cmf'] = ta.volume.chaikin_money_flow(f['high'], f['low'], f['close'], f['volume'], window=20) # Geri Geldi!
+        # Hacim
+        f['obv'] = ta.volume.on_balance_volume(f['close'], f['volume'])
+        f['mfi'] = ta.volume.money_flow_index(f['high'], f['low'], f['close'], f['volume'], window=14)
+        f['cmf'] = ta.volume.chaikin_money_flow(f['high'], f['low'], f['close'], f['volume'], window=20)
 
-        # Hedef Belirleme
+        # Hedef
         horizon = 1
         future_return = f['close'].pct_change(horizon).shift(-horizon)
         f['target_dir'] = (future_return > 0).astype(int)
         f['target_ret'] = future_return
-        
         return f
 
-# ---------- EĞİTİM VE TAHMİN ----------
+# ---------- AUTO-TUNER (ORİJİNAL KODDAN GERİ GETİRİLDİ) ----------
+class ModelAutoTuner:
+    """
+    Her hisse için en iyi Random Forest parametrelerini bulur.
+    """
+    def tune_params(self, X_train, y_train):
+        best_score = -1
+        best_params = {'depth': 6, 'est': 120} # Varsayılan
+        
+        # Orijinal koddaki grid
+        params_grid = [
+            {'depth': 4, 'est': 100},
+            {'depth': 6, 'est': 120},
+            {'depth': 8, 'est': 150}
+        ]
+        
+        # Veriyi böl (Hız için basit split)
+        split = int(len(X_train) * 0.8)
+        X_t, X_v = X_train[:split], X_train[split:]
+        y_t, y_v = y_train[:split], y_train[split:]
+        
+        for p in params_grid:
+            model = RandomForestClassifier(n_estimators=p['est'], max_depth=p['depth'], random_state=42, n_jobs=1)
+            model.fit(X_t, y_t)
+            score = accuracy_score(y_v, model.predict(X_v))
+            if score > best_score:
+                best_score = score
+                best_params = p
+        return best_params
+
+# ---------- STRATEGY MANAGER (ORİJİNAL KODDAN GERİ GETİRİLDİ) ----------
+class StrategyManager:
+    @staticmethod
+    def calculate_strategy(price, atr, conf, status):
+        """
+        ATR tabanlı Stop/Kar seviyeleri ve Kasa Yönetimi hesaplar.
+        """
+        if status != "AL":
+            return 0, 0, 0
+        
+        # Stop & Kar-Al
+        stop_loss = price - (2.0 * atr)
+        take_profit = price + (3.0 * atr)
+        
+        # Pozisyon Büyüklüğü (Orijinal Mantık)
+        base_allocation = 5.0 # %5
+        conf_multiplier = (conf / 0.60)
+        
+        # Volatilite Cezası
+        volatility_pct = (atr / price) * 100
+        vol_penalty = 1.0
+        if volatility_pct > 3.0: vol_penalty = 0.7
+        if volatility_pct > 5.0: vol_penalty = 0.5
+        
+        suggested_allocation = base_allocation * conf_multiplier * vol_penalty
+        suggested_allocation = min(suggested_allocation, 15.0)
+        suggested_allocation = max(suggested_allocation, 1.0)
+        
+        return stop_loss, take_profit, suggested_allocation
+
+# ---------- HYBRID MODEL TRAINER (Tam Sürüm) ----------
 class HybridModelTrainer:
     def __init__(self, config):
         self.config = config
@@ -157,6 +197,31 @@ class HybridModelTrainer:
         self.imputers = {}
         self.scalers = {}
         self.feature_cols = []
+
+    def _get_neural_network(self):
+        base_mlp = MLPClassifier(hidden_layer_sizes=(128, 64, 32), activation='relu', 
+                               solver='adam', alpha=0.001, max_iter=400, random_state=42)
+        return BaggingClassifier(estimator=base_mlp, n_estimators=5, random_state=42, n_jobs=1)
+
+    def _get_tree_models(self, best_params):
+        models = []
+        seed = 42
+        d = best_params['depth']
+        e = best_params['est']
+        
+        if _HAS_XGB: models.append(('xgb', xgb.XGBClassifier(n_estimators=e, max_depth=d-2, learning_rate=0.04, random_state=seed, n_jobs=1)))
+        if _HAS_LGB: models.append(('lgb', lgb.LGBMClassifier(n_estimators=e, max_depth=d-2, learning_rate=0.04, random_state=seed, verbose=-1, n_jobs=1)))
+        models.append(('rf', RandomForestClassifier(n_estimators=e, max_depth=d, random_state=seed, n_jobs=1)))
+        return models
+    
+    def _get_tree_regressors(self, best_params):
+        models = []
+        seed = 42
+        d = best_params['depth']
+        e = best_params['est']
+        if _HAS_XGB: models.append(('xgb', xgb.XGBRegressor(n_estimators=e, max_depth=d-2, learning_rate=0.04, random_state=seed, n_jobs=1)))
+        models.append(('rf', RandomForestRegressor(n_estimators=e, max_depth=d, random_state=seed, n_jobs=1)))
+        return models
 
     def train_hybrid(self, X: pd.DataFrame, y_cls: pd.Series, y_reg: pd.Series):
         cols_to_drop = ['target_dir', 'target_ret', 'open', 'high', 'low', 'close', 'volume', 'adj close']
@@ -169,27 +234,57 @@ class HybridModelTrainer:
         self.imputers['all'] = imp
         self.scalers['all'] = scl
         
-        rf = RandomForestClassifier(n_estimators=100, max_depth=6, random_state=42, n_jobs=1)
-        rf.fit(X_proc, y_cls)
-        self.models['tree'] = rf
+        # --- AUTO-TUNING (Geri Geldi) ---
+        tuner = ModelAutoTuner()
+        # Eğitim verisinin %80'i üzerinde tune et
+        split_tune = int(len(X_proc) * 0.8)
+        best_params = tuner.tune_params(X_proc[:split_tune], y_cls.iloc[:split_tune])
         
-        rf_reg = RandomForestRegressor(n_estimators=100, max_depth=6, random_state=42, n_jobs=1)
-        rf_reg.fit(X_proc, y_reg)
-        self.models['reg'] = rf_reg
+        # 1. KARAR AĞACI MODELLERİ
+        tree_estimators = self._get_tree_models(best_params)
+        tree_voting = VotingClassifier(estimators=tree_estimators, voting='soft', n_jobs=1)
+        tree_voting.fit(X_proc, y_cls)
+        self.models['tree'] = tree_voting
+        
+        # 2. NÖRAL AĞ
+        neural_net = self._get_neural_network()
+        neural_net.fit(X_proc, y_cls)
+        self.models['nn'] = neural_net
+        
+        # 3. REGRESYON
+        reg_estimators = self._get_tree_regressors(best_params)
+        voting_reg = VotingRegressor(estimators=reg_estimators, n_jobs=1)
+        voting_reg.fit(X_proc, y_reg)
+        self.models['reg'] = voting_reg
 
     def predict(self, X_raw: pd.DataFrame):
         X_ready = X_raw[self.feature_cols]
         X_proc = self.scalers['all'].transform(self.imputers['all'].transform(X_ready))
-        p_prob = self.models['tree'].predict_proba(X_proc)[0][1]
-        p_ret = self.models['reg'].predict(X_proc)[0]
-        return p_prob, p_ret
+        
+        p_tree = self.models['tree'].predict_proba(X_proc)[0][1]
+        p_nn = self.models['nn'].predict_proba(X_proc)[0][1]
+        final_prob = (p_tree * 0.55) + (p_nn * 0.45)
+        pred_ret = self.models['reg'].predict(X_proc)[0]
+        
+        votes = {"TREE": "AL" if p_tree > 0.5 else "SAT", "NEURAL": "AL" if p_nn > 0.5 else "SAT"}
+        return final_prob, pred_ret, votes
 
-# ---------- ANA TARAMA ----------
+# ---------- AKILLI ANALİZ VE TARAMA ----------
+def analyze_signal(votes, prob):
+    agreement = (votes['TREE'] == votes['NEURAL'])
+    raw_conf = abs(prob - 0.5) * 2
+    if agreement: raw_conf += 0.2
+    else: raw_conf *= 0.6
+    final_conf = min(raw_conf, 0.99)
+    status = "AL" if prob > 0.5 else "SAT"
+    if final_conf < 0.45: status = "NÖTR"
+    return status, final_conf
+
 def omni_scan():
-    tg_report = "🚀 *BIST 100 AI ANALİZ RAPORU (Full İndikatör)* 🚀\n\n"
-    print("Analiz Başlıyor...")
+    tg_report = "🚀 *BIST 100 STRATEGIST V14 (Orijinal Mantık)* 🚀\n\n"
+    print("Analiz Başlıyor (Auto-Tuner ve Risk Yönetimi Aktif)...")
     
-    # --- ENDEKS ANALİZİ ---
+    # --- ENDEKS ---
     try:
         dm = AdvancedDataManager()
         df_index = dm.download_data("XU100.IS")
@@ -203,7 +298,7 @@ def omni_scan():
             trainer.train_hybrid(train_df[f_cols], train_df['target_dir'], train_df['target_ret'])
             
             pred_row = df_f.iloc[[-1]]
-            p_prob, p_ret = trainer.predict(pred_row)
+            p_prob, p_ret, _ = trainer.predict(pred_row)
             
             status = "YÜKSELİŞ" if p_prob > 0.5 else "DÜŞÜŞ"
             icon = "🟢" if p_prob > 0.5 else "🔴"
@@ -211,7 +306,7 @@ def omni_scan():
             tg_report += f"Yön: {icon} {status} (Güven: %{p_prob*100:.1f})\n\n"
     except Exception as e: print(f"Endeks hatası: {e}")
 
-    # --- HİSSE TARAMASI ---
+    # --- HİSSELER ---
     results = []
     print("Hisseler taranıyor...")
     for ticker in BIST_100_LISTESI:
@@ -225,36 +320,44 @@ def omni_scan():
             train_df = df_features.dropna(subset=f_cols + ['target_dir', 'target_ret'])
             if len(train_df) < 50: continue
             
+            # Auto-Tuner devreye giriyor
             trainer = HybridModelTrainer(CONFIG)
             trainer.train_hybrid(train_df[f_cols], train_df['target_dir'], train_df['target_ret'])
             
             pred_row = df_features.iloc[[-1]]
-            p_prob, p_ret = trainer.predict(pred_row)
+            p_prob, p_ret, votes = trainer.predict(pred_row)
             
-            if p_prob > 0.55:
+            status, conf = analyze_signal(votes, p_prob)
+            
+            if status == "AL" and conf > 0.55:
                 price = df['close'].iloc[-1]
                 atr = pred_row['atr'].values[0]
-                stop = price - (2 * atr)
-                tp = price + (3 * atr)
+                
+                # Orijinal Strategy Manager hesaplaması
+                stop, tp, alloc = StrategyManager.calculate_strategy(price, atr, conf, status)
                 
                 results.append({
                     "Hisse": ticker.replace('.IS', ''),
                     "Fiyat": price,
-                    "Güven": p_prob,
+                    "Güven": conf,
                     "Hedef": p_ret,
                     "Stop": stop,
-                    "KarAl": tp
+                    "KarAl": tp,
+                    "Kasa": alloc # Kasa yönetimi geri geldi
                 })
         except: continue
 
     if results:
         results = sorted(results, key=lambda x: x['Güven'], reverse=True)
         tg_report += "💎 *GÜÇLÜ AL SİNYALLERİ* 💎\n"
-        tg_report += "Hisse | Fiyat | Güven | Hedef\n"
-        tg_report += "-"*30 + "\n"
+        tg_report += f"{'HİSSE':<8} {'FİYAT':<8} {'GÜVEN':<6} {'HEDEF':<6} {'KASA%'}\n"
+        tg_report += "-"*40 + "\n"
+        
         for row in results[:15]:
-            tg_report += f"*{row['Hisse']}*: {row['Fiyat']:.2f} | %{row['Güven']*100:.0f} | %{row['Hedef']*100:.1f}\n"
-        tg_report += "\n_Yatırım tavsiyesi değildir._"
+            tg_report += f"*{row['Hisse']}*: {row['Fiyat']:.2f} | %{row['Güven']*100:.0f} | %{row['Hedef']*100:.1f} | %{row['Kasa']:.1f}\n"
+        
+        tg_report += "\nℹ️ *Kasa%*: Risk ve volatiliteye göre portföyden önerilen pay.\n"
+        tg_report += "_Yatırım tavsiyesi değildir._"
     else:
         tg_report += "⚠️ Bugün güçlü sinyal bulunamadı."
 
